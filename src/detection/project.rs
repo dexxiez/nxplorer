@@ -14,6 +14,7 @@ pub struct Framework {
     pub name: &'static str,
     pub identity_files: &'static [&'static str],
     pub identity_keywords: &'static [&'static str],
+    pub commands: &'static [&'static str],
 }
 
 #[derive(Debug)]
@@ -34,16 +35,19 @@ pub const KNOWN_FRAMEWORKS: &[Framework] = &[
             "next.config.cjs",
         ],
         identity_keywords: &[],
+        commands: &["dev", "build", "start"],
     },
     Framework {
         name: "nuxt",
         identity_files: &["nuxt.config.js", "nuxt.config.ts"],
         identity_keywords: &[],
+        commands: &["dev", "build", "start"],
     },
     Framework {
         name: "angular",
         identity_files: &["angular.json"],
         identity_keywords: &["@angular"],
+        commands: &["serve", "build"],
     },
 ];
 impl Project {

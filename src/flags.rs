@@ -3,6 +3,7 @@ pub enum Flag {
     Version,
     Debug,
     Verbose,
+    Error,
 }
 
 pub fn parse_args(args: &Vec<String>) -> Vec<Flag> {
@@ -13,6 +14,7 @@ pub fn parse_args(args: &Vec<String>) -> Vec<Flag> {
             "-v" | "--version" => flags.push(Flag::Version),
             "-d" | "--debug" => flags.push(Flag::Debug),
             "-V" | "--verbose" => flags.push(Flag::Verbose),
+            "-E" | "--error" => flags.push(Flag::Error),
             _ => (),
         }
     }

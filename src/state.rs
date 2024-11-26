@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, Once};
 
 pub struct Store {
     pub verbose_enabled: bool,
+    pub error_enabled: bool,
 }
 
 pub struct State {
