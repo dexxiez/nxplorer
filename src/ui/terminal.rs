@@ -1,4 +1,4 @@
-use crate::detection::{self};
+use crate::detection::Project;
 use crossterm::{
     event::{self, KeyCode, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -12,7 +12,8 @@ use std::{
 
 struct App {
     search_path: PathBuf,
-    projects: Vec<detection::Project>,
+    projects: Vec<Project>,
+    commands: Vec<String>,
     selection: ListState,
 }
 
@@ -25,12 +26,13 @@ impl App {
         App {
             search_path: search_path.to_path_buf(),
             projects: vec![],
+            commands: vec![],
             selection,
         }
     }
 
     fn detect_projects(&mut self) {
-        self.projects = detection::Project::detect(self.search_path.as_path());
+        self.projects = Project::detect(self.search_path.as_path());
     }
 
     fn select(&self) -> bool {
@@ -39,7 +41,7 @@ impl App {
     fn next(&mut self) {
         let i = match self.selection.selected() {
             Some(i) => {
-                if i >= self.projects.len() - 1 {
+                if i >= self.commands.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -54,7 +56,7 @@ impl App {
         let i = match self.selection.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.projects.len() - 1
+                    self.commands.len() - 1
                 } else {
                     i - 1
                 }
@@ -89,16 +91,21 @@ pub fn run_app(search_path: String) -> Result<()> {
     })?;
 
     app.detect_projects();
+    app.commands = construct(&app.projects);
     terminal.clear()?;
-
+    if app.commands.is_empty() {
+        println!("No projects found in the specified path");
+        return Ok(());
+    }
     loop {
         terminal.draw(|frame| {
             let area = frame.area();
             let items: Vec<ListItem> = app
-                .projects
-                .iter()
-                .map(|project| {
-                    let item = ListItem::new(project.name.clone().trim_matches('"').to_string())
+                .commands
+                .clone()
+                .into_iter()
+                .map(|cmd| {
+                    let item = ListItem::new(cmd.replace('"', "").to_string())
                         .style(Style::default().fg(Color::White));
                     return item;
                 })
@@ -137,4 +144,16 @@ pub fn run_app(search_path: String) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn construct(projects: &Vec<Project>) -> Vec<String> {
+    let mut cmds = Vec::new();
+    projects.iter().for_each(|project| {
+        if !project.tasks.is_empty() {
+            project.tasks.iter().for_each(|task| {
+                cmds.push(format!("{}:{:?}", project.name, task.command));
+            });
+        }
+    });
+    return cmds;
 }
