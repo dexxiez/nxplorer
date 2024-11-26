@@ -6,15 +6,17 @@ use crate::utils::find_files;
 #[derive(Debug)]
 pub struct Task {
     pub command: String,
+    pub subcommands: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Framework {
     pub name: &'static str,
     pub identity_files: &'static [&'static str],
     pub identity_keywords: &'static [&'static str],
 }
 
+#[derive(Debug)]
 pub struct Project {
     pub name: String,
     pub tasks: Vec<Task>,
@@ -92,7 +94,7 @@ impl Project {
             Err(_) => return None,
         };
 
-        let tasks = match v.get("tasks").and_then(|t| t.as_object()) {
+        let tasks = match v.get("targets").and_then(|t| t.as_object()) {
             Some(task_map) => task_map,
             None => return None,
         };
@@ -101,12 +103,21 @@ impl Project {
             .iter()
             .map(|(key, value)| {
                 // Now you have both the key and the value
-                println!("Processing task: {}", key);
-
-                value.get("command").and_then(|cmd| {
-                    Some(Task {
-                        command: cmd.to_string(),
-                    })
+                if value.get("configurations") != None {
+                    let subcommands = value["configurations"]
+                        .as_object()
+                        .unwrap()
+                        .iter()
+                        .map(|(key, _)| key.to_string())
+                        .collect();
+                    return Some(Task {
+                        command: key.to_string(),
+                        subcommands,
+                    });
+                }
+                Some(Task {
+                    command: key.to_string(),
+                    subcommands: vec![],
                 })
             })
             .collect(); // collect will return None if any task conversion failed
