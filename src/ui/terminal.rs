@@ -55,6 +55,10 @@ impl App {
                         .status()
                         .expect("Failed to execute nx command");
 
+                    if status.success() {
+                        std::process::exit(0);
+                    }
+
                     println!("Command exited with status: {}", status);
                 }
                 return true;
