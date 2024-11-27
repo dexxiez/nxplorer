@@ -145,7 +145,9 @@ pub fn run_app(search_path: String) -> Result<()> {
             let titles = Paragraph::new(vec![
                 Line::from(vec![Span::styled(
                     format!("{} {}", NAME, VERSION),
-                    Style::default().add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
                 )])
                 .alignment(Alignment::Center),
                 Line::from(vec![]),
@@ -200,7 +202,7 @@ pub fn run_app(search_path: String) -> Result<()> {
         if event::poll(std::time::Duration::from_millis(50))? {
             if let event::Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('q') => break,
+                    KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Down | KeyCode::Char('j') => app.next(),
                     KeyCode::Up | KeyCode::Char('k') => app.previous(),
                     KeyCode::Char('c') => {
