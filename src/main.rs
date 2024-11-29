@@ -3,8 +3,11 @@ mod flags;
 mod state;
 mod ui;
 mod utils;
+use std::path::Path;
 
 use std::env;
+
+use utils::path_exists;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -50,6 +53,7 @@ fn main() {
             "nx is NOT installed globally. Currently nx is required to be installed globally."
         );
         eprintln!("Please install nx globally and try again.");
+
         // pkg manager instructions
         eprintln!("For npm:");
         eprintln!("  npm install -g nx");
@@ -59,11 +63,37 @@ fn main() {
         eprintln!("  pnpm add -g nx");
         return;
     }
-    let search_path = args.get(1).map(String::as_str).unwrap_or(".");
+
+    let search_path_str = args.get(1).map(String::as_str).unwrap_or(".");
+    project_paths_check(search_path_str);
 
     let _ = ui::terminal::setup();
-    let _ = ui::terminal::run_app(search_path.to_string());
+    let _ = ui::terminal::run_app(search_path_str.to_string());
     let _ = ui::terminal::cleanup();
+}
+
+fn project_paths_check(search_path_str: &str) {
+    let search_path = Path::new(&search_path_str);
+    let resolved_search_path = search_path.canonicalize().unwrap();
+    let resolved_search_path_str = resolved_search_path.to_str().unwrap();
+
+    if !path_exists(&search_path) {
+        eprintln!("The path \"{}\" does not exist.", &resolved_search_path_str);
+        std::process::exit(1);
+    }
+
+    if !path_exists(&search_path.join("nx.json")) {
+        eprintln!(
+            "The path \"{}\" does not appear to be a nx repo.",
+            &resolved_search_path_str
+        );
+        std::process::exit(1);
+    }
+
+    if !path_exists(&search_path.join("node_modules")) {
+        eprintln!("Please install the node_modules in the project root first.");
+        std::process::exit(1);
+    }
 }
 
 fn check_nx_available() -> bool {

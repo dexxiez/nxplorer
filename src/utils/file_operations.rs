@@ -32,3 +32,7 @@ pub fn find_files(dir: &Path, target_files: &[&str]) -> Vec<String> {
 
     results
 }
+
+pub fn path_exists(file: &Path) -> bool {
+    fs::metadata(&file).is_ok()
+}

@@ -2,16 +2,31 @@ PREFIX ?= /usr/local
 CARGO = cargo
 RUSTFLAGS ?= -A dead_code
 
-.PHONY: all clean install uninstall
+.PHONY: all build release rebuild clean stats install uninstall
 
 export RUSTFLAGS
 
-all:
+build:
+	$(CARGO) build
+	@echo "Build complete - Not optimized"
+
+release: clean
 	$(CARGO) build --release --locked
+	@strip target/release/nxplorer
+	@echo "Build complete - Optimized"
 
 clean:
 	$(CARGO) clean
 	rm -rf target/
+
+stats: release
+	@du -sh target/release/nxplorer | awk '{print "nxplorer binary size: " $$1}'
+	@file target/release/nxplorer
+	@ldd target/release/nxplorer
+
+rebuild: clean all
+
+	
 
 install: all
 	sudo install -d $(DESTDIR)$(PREFIX)/bin
@@ -19,3 +34,5 @@ install: all
 
 uninstall:
 	sudo rm -f $(DESTDIR)$(PREFIX)/bin/nxplorer
+
+all: build
