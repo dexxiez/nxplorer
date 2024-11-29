@@ -1,6 +1,7 @@
 use crate::detection::{project::Framework, Project};
+use canvas::{Canvas, Rectangle};
 use crossterm::{
-    event::{self, KeyCode, KeyModifiers},
+    event::{self, read, Event, KeyCode, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
@@ -9,6 +10,7 @@ use std::{
     io::{stdout, Result},
     path::{Path, PathBuf},
 };
+use tui_textarea::{Input, Key, TextArea};
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -16,7 +18,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 struct App {
     search_path: PathBuf,
     projects: Vec<Project>,
-    commands: Vec<String>,
+    display_commands: Vec<String>,
+    all_commands: Vec<String>,
     selection: ListState,
 }
 
@@ -29,7 +32,8 @@ impl App {
         App {
             search_path: search_path.to_path_buf(),
             projects: vec![],
-            commands: vec![],
+            display_commands: vec![],
+            all_commands: vec![],
             selection,
         }
     }
@@ -40,8 +44,8 @@ impl App {
 
     fn select(&self) -> bool {
         if let Some(i) = self.selection.selected() {
-            if i < self.commands.len() {
-                let selected_command = &self.commands[i];
+            if i < self.display_commands.len() {
+                let selected_command = &self.display_commands[i];
                 // Exit raw mode and leave alternate screen before executing command
                 let _ = cleanup();
 
@@ -70,7 +74,7 @@ impl App {
     fn next(&mut self) {
         let i = match self.selection.selected() {
             Some(i) => {
-                if i >= self.commands.len() - 1 {
+                if i >= self.display_commands.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -85,7 +89,7 @@ impl App {
         let i = match self.selection.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.commands.len() - 1
+                    self.display_commands.len() - 1
                 } else {
                     i - 1
                 }
@@ -93,6 +97,23 @@ impl App {
             None => 0,
         };
         self.selection.select(Some(i));
+    }
+
+    fn filter_commands(&mut self, search: &str) {
+        // Assuming you keep the original commands in a separate vec
+        self.display_commands = self
+            .all_commands
+            .iter()
+            .filter(|cmd| cmd.to_lowercase().contains(&search.to_lowercase()))
+            .cloned()
+            .collect();
+
+        // Reset selection if we filtered everything out
+        if self.display_commands.is_empty() {
+            self.selection.select(None);
+        } else {
+            self.selection.select(Some(0));
+        }
     }
 }
 
@@ -111,7 +132,7 @@ pub fn cleanup() -> Result<()> {
 pub fn run_app(search_path: String) -> Result<()> {
     let mut app = App::new(Path::new(&search_path));
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout())).unwrap();
-
+    let mut textarea = TextArea::default();
     terminal.clear()?;
     terminal.draw(|f| {
         let size = f.area();
@@ -120,9 +141,10 @@ pub fn run_app(search_path: String) -> Result<()> {
     })?;
 
     app.detect_projects();
-    app.commands = construct(&app.projects);
+    app.display_commands = construct(&app.projects);
+    app.all_commands = app.display_commands.clone();
     terminal.clear()?;
-    if app.commands.is_empty() {
+    if app.display_commands.is_empty() {
         println!("No projects found in the specified path");
         return Ok(());
     }
@@ -132,8 +154,9 @@ pub fn run_app(search_path: String) -> Result<()> {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(5), // Combined title block + top padding
-                    Constraint::Min(0),    // List
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(85),
+                    Constraint::Percentage(5),
                 ])
                 .split(area);
 
@@ -155,13 +178,13 @@ pub fn run_app(search_path: String) -> Result<()> {
                     format!(
                         "{} projects with {} tasks",
                         app.projects.len(),
-                        app.commands.len()
+                        app.display_commands.len()
                     ),
                     Style::default().fg(Color::Gray),
                 )])
                 .alignment(Alignment::Center),
                 Line::from(vec![Span::styled(
-                    "j / k or arrow keys to navigate, Enter to select, q / esc to quit",
+                    "arrow keys to navigate, Enter to select, q / esc to quit",
                     Style::default().fg(Color::DarkGray),
                 )])
                 .alignment(Alignment::Center),
@@ -182,7 +205,7 @@ pub fn run_app(search_path: String) -> Result<()> {
                 .split(layout[1])[1];
 
             let items: Vec<ListItem> = app
-                .commands
+                .display_commands
                 .clone()
                 .into_iter()
                 .map(|cmd| {
@@ -196,26 +219,56 @@ pub fn run_app(search_path: String) -> Result<()> {
                 .highlight_style(Style::new().magenta());
 
             frame.render_stateful_widget(list, list_area, &mut app.selection);
+
+            // For the list and textbox, we'll split vertically with percentage constraints
+
+            let search_area = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(60),
+                    Constraint::Percentage(20),
+                ])
+                .split(layout[2])[1];
+
+            let border_color = match app.display_commands.len() {
+                0 => Color::Red,
+                _ => Color::Gray,
+            };
+
+            // Style the textarea directly
+            textarea.set_block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color)),
+            );
+
+            // Render it directly - no .widget() needed
+            frame.render_widget(&textarea, search_area);
         })?;
 
         // Handle input
         if event::poll(std::time::Duration::from_millis(50))? {
-            if let event::Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => break,
-                    KeyCode::Down | KeyCode::Char('j') => app.next(),
-                    KeyCode::Up | KeyCode::Char('k') => app.previous(),
-                    KeyCode::Char('c') => {
-                        if key.modifiers == KeyModifiers::CONTROL {
-                            break;
-                        }
+            match event::read()?.into() {
+                Input { key: Key::Esc, .. } => break,
+                Input {
+                    key: Key::Char('c'),
+                    ctrl: true,
+                    ..
+                } => break,
+                Input { key: Key::Down, .. } => app.next(),
+                Input { key: Key::Up, .. } => app.previous(),
+                Input {
+                    key: Key::Enter, ..
+                } => {
+                    if app.select() {
+                        break;
                     }
-                    KeyCode::Enter => {
-                        if app.select() {
-                            break;
-                        }
-                    }
-                    _ => {}
+                }
+                input => {
+                    textarea.input(input);
+                    let search_text = textarea.lines()[0].to_string();
+                    app.filter_commands(&search_text);
                 }
             }
         }
