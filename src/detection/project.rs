@@ -4,6 +4,12 @@ use std::{fs, path::Path};
 use crate::utils::find_files;
 
 #[derive(Debug)]
+pub enum ProjectType {
+    Application,
+    Library,
+}
+
+#[derive(Debug)]
 pub struct Task {
     pub command: String,
     pub subcommands: Vec<String>,
@@ -20,8 +26,8 @@ pub struct Framework {
 #[derive(Debug)]
 pub struct Project {
     pub name: String,
+    pub project_type: ProjectType,
     pub tasks: Vec<Task>,
-    // optional framework for special cases
     pub framework: Option<Framework>,
 }
 
@@ -106,7 +112,6 @@ impl Project {
         let parsed_tasks: Option<Vec<Task>> = tasks
             .iter()
             .map(|(key, value)| {
-                // Now you have both the key and the value
                 if value.get("configurations") != None {
                     let subcommands = value["configurations"]
                         .as_object()
@@ -132,12 +137,14 @@ impl Project {
     fn parse_config(project_json_path: &String) -> Project {
         let project_config =
             fs::read_to_string(project_json_path).expect("Failed to read project.json file");
-
         let v: Value =
             serde_json::from_str(&project_config).expect("Failed to parse project.json file");
-
         Project {
-            name: v["name"].to_string(),
+            name: v["name"].as_str().unwrap().to_string(),
+            project_type: match v["projectType"].as_str().unwrap() {
+                "library" => ProjectType::Library,
+                _ => ProjectType::Application,
+            },
             tasks: Self::get_tasks(&project_config)
                 .into_iter()
                 .flatten()

@@ -1,13 +1,18 @@
-use crate::detection::{project::Framework, Project};
+use crate::detection::{
+    project::{Framework, ProjectType},
+    Project,
+};
 use crossterm::{
     event::{self},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
 use ratatui::{prelude::*, widgets::*};
+use regex::Regex;
 use std::{
     io::{stdout, Result},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use tui_textarea::{Input, Key, TextArea};
 
@@ -52,9 +57,12 @@ impl App {
                 let parts: Vec<&str> = selected_command.split(':').collect();
                 if parts.len() >= 2 {
                     // Construct and execute nx command
+                    let re = Regex::new(r"\[.*\] ").unwrap();
+                    let mut command_to_run = selected_command.replace(':', ":");
+                    command_to_run = re.replace_all(&command_to_run, "").to_string();
                     let status = std::process::Command::new("nx")
                         .arg("run")
-                        .arg(selected_command.replace(':', ":"))
+                        .arg(&command_to_run)
                         .status()
                         .expect("Failed to execute nx command");
 
@@ -128,6 +136,16 @@ pub fn cleanup() -> Result<()> {
     Ok(())
 }
 
+fn nx_reset() {
+    std::process::Command::new("nx")
+        .arg("reset")
+        .status()
+        .expect("Failed to execute nx reset");
+
+    let _ = cleanup();
+    std::process::exit(0);
+}
+
 pub fn run_app(search_path: String) -> Result<()> {
     let mut app = App::new(Path::new(&search_path));
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout())).unwrap();
@@ -153,8 +171,8 @@ pub fn run_app(search_path: String) -> Result<()> {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(85),
+                    Constraint::Percentage(8),
+                    Constraint::Percentage(87),
                     Constraint::Percentage(5),
                 ])
                 .split(area);
@@ -184,10 +202,14 @@ pub fn run_app(search_path: String) -> Result<()> {
                 .alignment(Alignment::Center),
                 Line::from(vec![Span::styled(
                     "arrow keys to navigate, Enter to select, q / esc to quit",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Yellow),
                 )])
                 .alignment(Alignment::Center),
-                Line::from(vec![]),
+                Line::from(vec![Span::styled(
+                    "Ctrl + r to reset nx",
+                    Style::default().fg(Color::Yellow),
+                )])
+                .alignment(Alignment::Center),
             ]);
 
             frame.render_widget(title_block, layout[0]);
@@ -251,6 +273,11 @@ pub fn run_app(search_path: String) -> Result<()> {
             match event::read()?.into() {
                 Input { key: Key::Esc, .. } => break,
                 Input {
+                    key: Key::Char('r'),
+                    ctrl: true,
+                    ..
+                } => nx_reset(),
+                Input {
                     key: Key::Char('c'),
                     ctrl: true,
                     ..
@@ -287,6 +314,21 @@ fn dedupe<T: PartialEq>(v: &mut Vec<T>) {
     }
 }
 
+fn display_project_type(project_type: &ProjectType, framework: &Option<Framework>) -> String {
+    let _project_type = match project_type {
+        ProjectType::Library => String::from_str("lib").unwrap(),
+        ProjectType::Application => String::from_str("app").unwrap(),
+    };
+
+    if framework.is_none() {
+        return _project_type;
+    }
+
+    let _framework = framework.unwrap();
+
+    return format!("{}:{}", _project_type, _framework.name);
+}
+
 fn construct(projects: &Vec<Project>) -> Vec<String> {
     let mut cmds: Vec<String> = Vec::new();
     projects.iter().for_each(|project| {
@@ -301,13 +343,24 @@ fn construct(projects: &Vec<Project>) -> Vec<String> {
 
         if !project.tasks.is_empty() {
             project.tasks.iter().for_each(|task| {
-                cmds.push(format!("{}:{:?}", project.name, task.command));
+                cmds.push(format!(
+                    "[{}] {}:{:?}",
+                    display_project_type(&project.project_type, &project.framework),
+                    project.name,
+                    task.command
+                ));
                 if task.subcommands.is_empty() {
                     return;
                 }
 
                 task.subcommands.iter().for_each(|subcmd| {
-                    cmds.push(format!("{}:{}:{}", project.name, task.command, subcmd));
+                    cmds.push(format!(
+                        "[{}] {}:{}:{}",
+                        display_project_type(&project.project_type, &project.framework),
+                        project.name,
+                        task.command,
+                        subcmd
+                    ));
                 });
             });
         }
@@ -317,7 +370,12 @@ fn construct(projects: &Vec<Project>) -> Vec<String> {
         }
 
         framework.commands.iter().for_each(|cmd| {
-            cmds.push(format!("{}:{}", project.name, cmd));
+            cmds.push(format!(
+                "[{}] {}:{}",
+                display_project_type(&project.project_type, &project.framework),
+                project.name,
+                cmd
+            ));
         });
     });
     dedupe(&mut cmds);
