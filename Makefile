@@ -28,7 +28,7 @@ rebuild: clean all
 
 	
 
-install: all
+install:
 	sudo install -d $(DESTDIR)$(PREFIX)/bin
 	sudo install -m 755 target/release/nxplorer $(DESTDIR)$(PREFIX)/bin/nxplorer
 
