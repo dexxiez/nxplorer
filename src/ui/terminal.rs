@@ -1,7 +1,6 @@
 use crate::detection::{project::Framework, Project};
-use canvas::{Canvas, Rectangle};
 use crossterm::{
-    event::{self, read, Event, KeyCode, KeyModifiers},
+    event::{self},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
