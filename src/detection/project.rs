@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 
 use crate::utils::find_files;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProjectType {
     Application,
     Library,
