@@ -3,6 +3,8 @@ use std::{fs, path::Path};
 
 use crate::utils::find_files;
 
+use super::frameworks::KNOWN_FRAMEWORKS;
+
 #[derive(Debug, Clone)]
 pub enum ProjectType {
     Application,
@@ -14,12 +16,18 @@ pub struct Task {
     pub command: String,
     pub subcommands: Vec<String>,
 }
+#[derive(Debug)]
+pub struct DeepDetectionMatcher {
+    pub path: &'static str,
+    pub keyword: &'static str,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Framework {
     pub name: &'static str,
     pub identity_files: &'static [&'static str],
-    pub identity_keywords: &'static [&'static str],
+    pub proj_identity_keywords: &'static [&'static str],
+    pub deep_detection_matchers: &'static [DeepDetectionMatcher],
     pub commands: &'static [&'static str],
 }
 
@@ -31,31 +39,6 @@ pub struct Project {
     pub framework: Option<Framework>,
 }
 
-pub const KNOWN_FRAMEWORKS: &[Framework] = &[
-    Framework {
-        name: "nextjs",
-        identity_files: &[
-            "next.config.js",
-            "next.config.ts",
-            "next.config.mjs",
-            "next.config.cjs",
-        ],
-        identity_keywords: &[],
-        commands: &["dev", "build", "start"],
-    },
-    Framework {
-        name: "nuxt",
-        identity_files: &["nuxt.config.js", "nuxt.config.ts"],
-        identity_keywords: &[],
-        commands: &["dev", "build", "start"],
-    },
-    Framework {
-        name: "angular",
-        identity_files: &["angular.json"],
-        identity_keywords: &["@angular"],
-        commands: &["serve", "build"],
-    },
-];
 impl Project {
     pub fn detect(base_repo_path: &Path) -> Vec<Project> {
         let mut projects = Vec::new();
@@ -70,6 +53,9 @@ impl Project {
             let mut project = Project::parse_config(&project_json_path);
 
             project.framework = Self::detect_framework(&containing_path);
+            if project.framework.is_none() {
+                project.framework = Self::deep_detect_framework(&containing_path);
+            }
             projects.push(project);
         }
 
@@ -85,12 +71,29 @@ impl Project {
                 }
             }
 
-            if !framework.identity_keywords.is_empty()
+            if !framework.proj_identity_keywords.is_empty()
                 && fs::read_to_string(project_path.join("project.json"))
                     .expect("Failed to read project.json file")
-                    .contains(framework.identity_keywords.iter().next().unwrap())
+                    .contains(framework.proj_identity_keywords.iter().next().unwrap())
             {
                 return Some(framework.clone());
+            }
+        }
+
+        None
+    }
+
+    fn deep_detect_framework(project_path: &Path) -> Option<Framework> {
+        for framework in KNOWN_FRAMEWORKS {
+            for matcher in framework.deep_detection_matchers {
+                let matcher_path = project_path.join(&matcher.path);
+                if matcher_path.exists() {
+                    let matcher_content =
+                        fs::read_to_string(&matcher_path).expect("Failed to read matcher file");
+                    if matcher_content.contains(&matcher.keyword) {
+                        return Some(framework.clone());
+                    }
+                }
             }
         }
 
