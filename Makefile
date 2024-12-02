@@ -12,7 +12,6 @@ build:
 
 release: clean
 	$(CARGO) build --release --locked
-	@strip target/release/nxplorer
 	@echo "Build complete - Optimized"
 
 clean:

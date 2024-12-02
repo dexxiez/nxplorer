@@ -168,7 +168,10 @@ impl App {
             .iter()
             .filter_map(|cmd| {
                 let display = cmd.display_string();
-                let prepped_cmd = Self::prep_for_matching(&display);
+                let mut prepped_cmd = Self::prep_for_matching(&display);
+                let reversed_words_command =
+                    display.split_whitespace().rev().collect::<Vec<&str>>();
+                prepped_cmd = prepped_cmd + " " + &reversed_words_command.join(" ");
 
                 matcher
                     .fuzzy_match(&prepped_cmd, &prepped_search)
