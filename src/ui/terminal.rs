@@ -268,12 +268,12 @@ pub fn run_app(search_path: String) -> Result<()> {
                 )])
                 .alignment(Alignment::Center),
                 Line::from(vec![Span::styled(
-                    "arrow keys to navigate, Enter to select, q / esc to quit",
+                    "arrow keys to navigate, enter/tab to select, q / esc to quit",
                     Style::default().fg(Color::Yellow),
                 )])
                 .alignment(Alignment::Center),
                 Line::from(vec![Span::styled(
-                    "Ctrl + r to reset nx",
+                    "ctrl + r to reset nx",
                     Style::default().fg(Color::Yellow),
                 )])
                 .alignment(Alignment::Center),
@@ -374,6 +374,11 @@ pub fn run_app(search_path: String) -> Result<()> {
                 } => break,
                 Input { key: Key::Down, .. } => app.next(),
                 Input { key: Key::Up, .. } => app.previous(),
+                Input { key: Key::Tab, .. } => {
+                    if app.select() {
+                        break;
+                    }
+                }
                 Input {
                     key: Key::Enter, ..
                 } => {
