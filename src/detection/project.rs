@@ -1,9 +1,29 @@
 use serde_json::Value;
 use std::{fs, path::Path};
 
+use std::error::Error;
+use std::fmt;
+
 use crate::utils::find_files;
 
 use super::frameworks::KNOWN_FRAMEWORKS;
+
+#[derive(Debug)]
+pub enum ProjectError {
+    IoError(std::io::Error),
+    JsonParseError(serde_json::Error),
+    MissingField(&'static str),
+}
+
+impl fmt::Display for ProjectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IoError(e) => write!(f, "IO error: {}", e),
+            Self::JsonParseError(e) => write!(f, "JSON parsing error: {}", e),
+            Self::MissingField(field) => write!(f, "Missing required field: {}", field),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum ProjectType {
@@ -39,27 +59,49 @@ pub struct Project {
     pub framework: Option<Framework>,
 }
 
+impl Error for ProjectError {}
+
+// Some helpful conversions
+impl From<std::io::Error> for ProjectError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IoError(err)
+    }
+}
+
+impl From<serde_json::Error> for ProjectError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::JsonParseError(err)
+    }
+}
+
 impl Project {
     pub fn detect(base_repo_path: &Path) -> Vec<Project> {
         let mut projects = Vec::new();
-
         let project_json_paths = find_files(base_repo_path, &["project.json"]);
 
         for project_json_path in project_json_paths {
-            let containing_path = Path::new(&project_json_path)
-                .parent()
-                .expect("Failed to get parent path");
+            let containing_path = match Path::new(&project_json_path).parent() {
+                Some(path) => path,
+                None => continue,
+            };
 
-            let mut project = Project::parse_config(&project_json_path);
-
-            project.framework = Self::detect_framework(&containing_path);
-            if project.framework.is_none() {
-                project.framework = Self::deep_detect_framework(&containing_path);
+            // Handle the Result from parse_config
+            match Project::parse_config(&project_json_path) {
+                Ok(mut project) => {
+                    project.framework = Self::detect_framework(&containing_path);
+                    if project.framework.is_none() {
+                        project.framework = Self::deep_detect_framework(&containing_path);
+                    }
+                    projects.push(project);
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse project {}: {}", project_json_path, e);
+                    continue;
+                }
             }
-            projects.push(project);
         }
 
-        return projects;
+        projects
     }
 
     fn detect_framework(project_path: &Path) -> Option<Framework> {
@@ -137,22 +179,34 @@ impl Project {
         parsed_tasks
     }
 
-    fn parse_config(project_json_path: &String) -> Project {
-        let project_config =
-            fs::read_to_string(project_json_path).expect("Failed to read project.json file");
-        let v: Value =
-            serde_json::from_str(&project_config).expect("Failed to parse project.json file");
-        Project {
-            name: v["name"].as_str().unwrap().to_string(),
-            project_type: match v["projectType"].as_str().unwrap() {
+    fn parse_config(project_json_path: &String) -> Result<Project, ProjectError> {
+        let project_config = fs::read_to_string(project_json_path)?;
+
+        let v: Value = serde_json::from_str(&project_config)?;
+
+        let name = v["name"]
+            .as_str()
+            .ok_or(ProjectError::MissingField("name"))?
+            .to_string();
+
+        let project_type = v["projectType"]
+            .as_str()
+            .ok_or(ProjectError::MissingField("projectType"))
+            .map(|t| match t {
                 "library" => ProjectType::Library,
-                _ => ProjectType::Application,
-            },
-            tasks: Self::get_tasks(&project_config)
-                .into_iter()
-                .flatten()
-                .collect(),
+                _other => ProjectType::Application,
+            })?;
+
+        let tasks = Self::get_tasks(&project_config)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+        Ok(Project {
+            name,
+            project_type,
+            tasks,
             framework: None,
-        }
+        })
     }
 }

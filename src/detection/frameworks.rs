@@ -50,4 +50,18 @@ pub const KNOWN_FRAMEWORKS: &[Framework] = &[
         deep_detection_matchers: &[],
         commands: &["open-cypress", "e2e"],
     },
+    Framework {
+        name: "Vite",
+        identity_files: &[
+            "vite.config.ts",
+            "vite.config.js",
+            "vite.config.mjs",
+            "vite.config.cjs",
+            "vite.config.mts",
+            "vite.config.cts",
+        ],
+        proj_identity_keywords: &[],
+        deep_detection_matchers: &[],
+        commands: &["serve", "build"],
+    },
 ];
